@@ -1,0 +1,39 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://ewarrant:ewarrant_pass@db:5432/ewarrant360?schema=public
+      - NEXTAUTH_SECRET=super-secret-jwt-key-for-e-warrant-360-sri-lanka
+      - NEXTAUTH_URL=http://localhost:3000
+      - AUTH_SECRET=super-secret-jwt-key-for-e-warrant-360-sri-lanka
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - NEXT_PUBLIC_APP_NAME=e-warrant360
+      - NODE_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=ewarrant
+      - POSTGRES_PASSWORD=ewarrant_pass
+      - POSTGRES_DB=ewarrant360
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ewarrant -d ewarrant360"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

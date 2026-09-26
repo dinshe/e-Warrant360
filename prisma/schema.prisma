@@ -1,0 +1,609 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum UserRole {
+  PLATFORM_ADMIN
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum ShopStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum Province {
+  WESTERN
+  CENTRAL
+  SOUTHERN
+  NORTHERN
+  EASTERN
+  NORTH_WESTERN
+  NORTH_CENTRAL
+  UVA
+  SABARAGAMUWA
+}
+
+enum WarrantyStatus {
+  DRAFT
+  ACTIVE
+  PENDING
+  EXPIRED
+  CLAIMED
+  UNDER_SERVICE
+  REPAIRED
+  REPLACED
+  TRANSFERRED
+  VOIDED
+  CANCELLED
+  REJECTED
+  COMPLETED
+}
+
+enum WarrantyType {
+  MANUFACTURER
+  SELLER
+  EXTENDED
+  LIMITED
+  LIFETIME
+  CUSTOM
+}
+
+enum ClaimStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  UNDER_SERVICE
+  REPAIRED
+  REPLACED
+  COMPLETED
+  CLOSED
+}
+
+enum NotificationEvent {
+  WARRANTY_CREATED
+  WARRANTY_EXPIRING
+  WARRANTY_EXPIRED
+  CLAIM_CREATED
+  CLAIM_STATUS_CHANGED
+  REPAIR_COMPLETED
+  WARRANTY_TRANSFERRED
+  REPLACEMENT_DONE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  REGISTER
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET_COMPLETE
+  EMAIL_VERIFIED
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  ROLE_CHANGED
+  SHOP_CREATED
+  SHOP_UPDATED
+  SHOP_SUSPENDED
+  SHOP_REACTIVATED
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  PRODUCT_DELETED
+  CUSTOMER_CREATED
+  CUSTOMER_UPDATED
+  CUSTOMER_DELETED
+  WARRANTY_CREATED
+  WARRANTY_UPDATED
+  WARRANTY_CANCELLED
+  WARRANTY_VOIDED
+  WARRANTY_TRANSFERRED
+  WARRANTY_EXPIRED
+  WARRANTY_VERIFIED
+  CLAIM_CREATED
+  CLAIM_UPDATED
+  CLAIM_RESOLVED
+  STAFF_INVITED
+  STAFF_REMOVED
+  SETTINGS_UPDATED
+  FILE_UPLOADED
+  IMPORT_COMPLETED
+  EXPORT_COMPLETED
+  API_KEY_CREATED
+  API_KEY_REVOKED
+}
+
+// ─────────────────────────────────────────
+// PLATFORM / TENANCY
+// ─────────────────────────────────────────
+
+model Shop {
+  id                     String     @id @default(cuid())
+  name                   String
+  slug                   String     @unique
+  logoUrl                String?
+  description            String?
+  email                  String
+  phone                  String?
+  website                String?
+  addressLine1           String?
+  addressLine2           String?
+  city                   String?
+  district               String?
+  province               Province?
+  postalCode             String?
+  businessRegNumber      String?
+  currency               String     @default("LKR")
+  timezone               String     @default("Asia/Colombo")
+  status                 ShopStatus @default(PENDING)
+  defaultWarrantyMonths  Int        @default(12)
+  warrantyPolicy         String?
+  claimPolicy            String?
+  replacementPolicy      String?
+  transferPolicy         String?
+  notifyOnCreate         Boolean    @default(true)
+  notifyOnExpiry         Boolean    @default(true)
+  notifyDaysBeforeExpiry Int        @default(30)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  deletedAt              DateTime?
+
+  users         ShopUser[]
+  products      Product[]
+  customers     Customer[]
+  warranties    Warranty[]
+  claims        WarrantyClaim[]
+  auditLogs     AuditLog[]
+  apiKeys       ApiKey[]
+  notifications NotificationLog[]
+  staffInvites  StaffInvite[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────
+
+model User {
+  id                      String     @id @default(cuid())
+  email                   String     @unique
+  emailVerified           DateTime?
+  passwordHash            String?
+  name                    String
+  phone                   String?
+  avatarUrl               String?
+  status                  UserStatus @default(PENDING_VERIFICATION)
+  isPlatformAdmin         Boolean    @default(false)
+  emailVerificationToken  String?    @unique
+  emailVerificationExpiry DateTime?
+  passwordResetToken      String?    @unique
+  passwordResetExpiry     DateTime?
+  failedLoginAttempts     Int        @default(0)
+  lockedUntil             DateTime?
+  lastLoginAt             DateTime?
+  lastLoginIp             String?
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  deletedAt               DateTime?
+
+  shopUsers        ShopUser[]
+  auditLogs        AuditLog[]
+  issuedWarranties Warranty[]      @relation("IssuedBy")
+  handledClaims    WarrantyClaim[] @relation("HandledBy")
+  sessions         Session[]
+
+  @@index([email])
+  @@index([emailVerificationToken])
+  @@index([passwordResetToken])
+}
+
+model ShopUser {
+  id        String   @id @default(cuid())
+  shopId    String
+  userId    String
+  role      UserRole @default(STAFF)
+  isActive  Boolean  @default(true)
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, userId])
+  @@index([shopId])
+  @@index([userId])
+}
+
+model StaffInvite {
+  id        String    @id @default(cuid())
+  shopId    String
+  email     String
+  role      UserRole  @default(STAFF)
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([shopId])
+}
+
+// NextAuth sessions
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  ipAddress    String?
+  userAgent    String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionToken])
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────
+// PRODUCTS
+// ─────────────────────────────────────────
+
+model Category {
+  id        String   @id @default(cuid())
+  shopId    String
+  name      String
+  slug      String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@unique([shopId, slug])
+  @@index([shopId])
+}
+
+model Product {
+  id                    String       @id @default(cuid())
+  shopId                String
+  categoryId            String?
+  name                  String
+  brand                 String?
+  modelNumber           String?
+  sku                   String?
+  barcode               String?
+  description           String?
+  imageUrl              String?
+  requiresSerialNumber  Boolean      @default(false)
+  purchaseCost          Decimal?     @db.Decimal(12, 2)
+  sellingPrice          Decimal?     @db.Decimal(12, 2)
+  defaultWarrantyMonths Int          @default(12)
+  warrantyType          WarrantyType @default(SELLER)
+  warrantyTerms         String?
+  warrantyExclusions    String?
+  isActive              Boolean      @default(true)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  deletedAt             DateTime?
+
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  category  Category? @relation(fields: [categoryId], references: [id])
+  warranties Warranty[]
+
+  @@unique([shopId, sku])
+  @@index([shopId])
+  @@index([shopId, name])
+  @@index([shopId, barcode])
+}
+
+// ─────────────────────────────────────────
+// CUSTOMERS
+// ─────────────────────────────────────────
+
+model Customer {
+  id           String    @id @default(cuid())
+  shopId       String
+  name         String
+  email        String?
+  phone        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  district     String?
+  customerRef  String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  shop       Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  warranties Warranty[]
+
+  @@unique([shopId, phone])
+  @@unique([shopId, customerRef])
+  @@index([shopId])
+  @@index([shopId, name])
+  @@index([shopId, email])
+}
+
+// ─────────────────────────────────────────
+// WARRANTIES
+// ─────────────────────────────────────────
+
+model Warranty {
+  id                String         @id @default(cuid())
+  shopId            String
+  warrantyNumber    String         @unique
+  verificationToken String         @unique
+  customerId        String
+  productId         String
+  issuedById        String
+  status            WarrantyStatus @default(DRAFT)
+  warrantyType      WarrantyType
+  serialNumber      String?
+  invoiceNumber     String?
+  purchaseDate      DateTime
+  warrantyStartDate DateTime
+  warrantyEndDate   DateTime
+  warrantyMonths    Int
+  terms             String?
+  exclusions        String?
+  notes             String?
+  internalNotes     String?
+  purchasePrice     Decimal?       @db.Decimal(12, 2)
+  replacedById      String?        @unique
+  idempotencyKey    String?        @unique
+  activatedAt       DateTime?
+  expiredAt         DateTime?
+  cancelledAt       DateTime?
+  voidedAt          DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  shop        Shop                 @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  customer    Customer             @relation(fields: [customerId], references: [id])
+  product     Product              @relation(fields: [productId], references: [id])
+  issuedBy    User                 @relation("IssuedBy", fields: [issuedById], references: [id])
+  claims      WarrantyClaim[]
+  transfers   WarrantyTransfer[]
+  replacedBy  Warranty?            @relation("Replacement", fields: [replacedById], references: [id])
+  replaces    Warranty?            @relation("Replacement")
+  attachments WarrantyAttachment[]
+  events      WarrantyEvent[]
+
+  @@index([shopId])
+  @@index([shopId, status])
+  @@index([warrantyNumber])
+  @@index([verificationToken])
+  @@index([shopId, customerId])
+  @@index([shopId, productId])
+  @@index([shopId, serialNumber])
+  @@index([shopId, invoiceNumber])
+  @@index([warrantyEndDate])
+}
+
+model WarrantyEvent {
+  id         String         @id @default(cuid())
+  warrantyId String
+  fromStatus WarrantyStatus?
+  toStatus   WarrantyStatus
+  actorId    String?
+  actorName  String
+  note       String?
+  metadata   Json?
+  createdAt  DateTime       @default(now())
+
+  warranty Warranty @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+
+  @@index([warrantyId])
+}
+
+model WarrantyAttachment {
+  id           String    @id @default(cuid())
+  warrantyId   String
+  claimId      String?
+  fileName     String
+  storagePath  String
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+
+  warranty Warranty       @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+  claim    WarrantyClaim? @relation(fields: [claimId], references: [id])
+
+  @@index([warrantyId])
+}
+
+model WarrantyTransfer {
+  id               String   @id @default(cuid())
+  warrantyId       String
+  fromCustomerId   String
+  toCustomerId     String
+  fromCustomerName String
+  toCustomerName   String
+  transferDate     DateTime
+  authorizedById   String?
+  authorizedByName String
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  warranty Warranty @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+
+  @@index([warrantyId])
+}
+
+// ─────────────────────────────────────────
+// CLAIMS
+// ─────────────────────────────────────────
+
+model WarrantyClaim {
+  id              String      @id @default(cuid())
+  shopId          String
+  warrantyId      String
+  claimNumber     String      @unique
+  status          ClaimStatus @default(SUBMITTED)
+  reportedIssue   String
+  inspectionNotes String?
+  repairNotes     String?
+  rejectionReason String?
+  replacementInfo String?
+  handledById     String?
+  submittedAt     DateTime    @default(now())
+  reviewedAt      DateTime?
+  resolvedAt      DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  shop        Shop                 @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  warranty    Warranty             @relation(fields: [warrantyId], references: [id])
+  handledBy   User?                @relation("HandledBy", fields: [handledById], references: [id])
+  attachments WarrantyAttachment[]
+  events      ClaimEvent[]
+
+  @@index([shopId])
+  @@index([warrantyId])
+  @@index([claimNumber])
+  @@index([status])
+}
+
+model ClaimEvent {
+  id         String      @id @default(cuid())
+  claimId    String
+  fromStatus ClaimStatus?
+  toStatus   ClaimStatus
+  actorId    String?
+  actorName  String
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  claim WarrantyClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+}
+
+// ─────────────────────────────────────────
+// AUDIT & SECURITY
+// ─────────────────────────────────────────
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  shopId     String?
+  actorId    String?
+  actorEmail String?
+  actorName  String?
+  action     AuditAction
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  shop  Shop? @relation(fields: [shopId], references: [id])
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([shopId])
+  @@index([actorId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model RateLimitEntry {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  count     Int      @default(1)
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([resetAt])
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+
+model NotificationLog {
+  id        String              @id @default(cuid())
+  shopId    String?
+  event     NotificationEvent
+  channel   NotificationChannel
+  recipient String
+  status    String              @default("PENDING")
+  metadata  Json?
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  shop Shop? @relation(fields: [shopId], references: [id])
+
+  @@index([shopId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// INTEGRATION / API
+// ─────────────────────────────────────────
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  shopId      String
+  name        String
+  keyHash     String    @unique
+  prefix      String
+  permissions String[]  @default([])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([keyHash])
+}
