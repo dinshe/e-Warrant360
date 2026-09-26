@@ -26,8 +26,7 @@ function LoginForm() {
       if (result?.error) {
         toast.error('Invalid email or password. Please try again.')
       } else {
-        router.push(callbackUrl)
-        router.refresh()
+        window.location.href = callbackUrl
       }
     } catch {
       toast.error('Something went wrong. Please try again.')
