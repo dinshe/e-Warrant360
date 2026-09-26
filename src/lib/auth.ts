@@ -12,7 +12,7 @@ const loginSchema = z.object({
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  session: { strategy: 'database' },
+  session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
     error: '/login',
@@ -86,12 +86,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async session({ session, user }) {
-      if (session.user && user) {
-        session.user.id = user.id
-        // Fetch shop context — always from DB, never from client
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id
+        token.isPlatformAdmin = (user as any).isPlatformAdmin
+      }
+      return token
+    },
+    async session({ session, token }) {
+      const userId = (token?.id as string) || (token?.sub as string)
+      if (session.user && userId) {
+        session.user.id = userId
+        // Fetch shop context — always fresh from DB, never from client
         const shopUser = await prisma.shopUser.findFirst({
-          where: { userId: user.id, isActive: true },
+          where: { userId, isActive: true },
           include: {
             shop: {
               select: { id: true, name: true, slug: true, status: true },
@@ -103,7 +111,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ;(session.user as any).shopSlug = shopUser?.shop?.slug ?? null
         ;(session.user as any).shopName = shopUser?.shop?.name ?? null
         ;(session.user as any).role = shopUser?.role ?? null
-        ;(session.user as any).isPlatformAdmin = (user as any).isPlatformAdmin ?? false
+        ;(session.user as any).isPlatformAdmin = (token.isPlatformAdmin as boolean) ?? false
       }
       return session
     },

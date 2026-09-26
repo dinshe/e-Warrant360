@@ -12,6 +12,17 @@ export default async function StaffPage() {
   const session = await auth()
   const shopId = (session?.user as any)?.shopId
 
+  if (!shopId) {
+    return (
+      <div className="p-8 text-center bg-white rounded-xl border border-gray-200">
+        <h2 className="text-xl font-bold text-gray-900">Shop Not Found</h2>
+        <p className="text-gray-500 mt-2">
+          Your account is not currently associated with an active shop profile.
+        </p>
+      </div>
+    )
+  }
+
   const staffMembers = await prisma.shopUser.findMany({
     where: { shopId },
     include: {

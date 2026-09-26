@@ -41,7 +41,7 @@ export async function GET(
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
 
-  if (!token || token.length < 40) {
+  if (!token || token.length < 16) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
   }
 

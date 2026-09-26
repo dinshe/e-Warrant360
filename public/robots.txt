@@ -1,0 +1,8 @@
+# e-warrant360 robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /audit/
+Disallow: /settings/

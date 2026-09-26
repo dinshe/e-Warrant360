@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 
 const prisma = new PrismaClient()
 
@@ -354,7 +354,24 @@ async function main() {
     },
   })
 
-  // 8. Create Initial Audit Logs
+  // 8. Create Demo API Key for Colombo Tech Mart POS Integration
+  const demoApiKey = 'ew_live_colombotech_demo_key_2024'
+  const demoKeyHash = createHash('sha256').update(demoApiKey).digest('hex')
+  await prisma.apiKey.upsert({
+    where: { keyHash: demoKeyHash },
+    update: {},
+    create: {
+      shopId: shop.id,
+      name: 'Colombo Main POS Terminal',
+      keyHash: demoKeyHash,
+      prefix: 'ew_live_colombo...',
+      permissions: ['pos:write', 'warranty:create'],
+      createdById: shopOwner.id,
+      isActive: true,
+    },
+  })
+
+  // 9. Create Initial Audit Logs
   await prisma.auditLog.create({
     data: {
       shopId: shop.id,
@@ -388,6 +405,7 @@ async function main() {
   console.log('Shop Owner:           kasun@colombotech.lk  /  SellerPass123!')
   console.log('Shop Staff:           nuwan@colombotech.lk  /  StaffPass123!')
   console.log('Sample Warranty:      EW360-7F4K92 (Token: vtok_7f4k92_demo_cryptotoken_srilanka_98721)')
+  console.log('Demo POS API Key:     ew_live_colombotech_demo_key_2024')
   console.log('───────────────────────────────────────────────────────')
 }
 

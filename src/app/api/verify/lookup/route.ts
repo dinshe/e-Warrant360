@@ -10,18 +10,35 @@ export async function GET(req: NextRequest) {
   }
 
   // Rate limiting check
-  const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    req.headers.get('x-real-ip') ??
+    'unknown'
   const key = `lookup:${ip}`
   const now = new Date()
 
-  const entry = await prisma.rateLimitEntry.upsert({
-    where: { key },
-    update: { count: { increment: 1 }, updatedAt: now },
-    create: { key, count: 1, resetAt: new Date(now.getTime() + 60 * 1000) },
-  })
-
-  if (entry.count > 25) {
-    return NextResponse.json({ error: 'Too many verification requests. Please wait a moment.' }, { status: 429 })
+  const entry = await prisma.rateLimitEntry.findUnique({ where: { key } })
+  if (entry && entry.resetAt < now) {
+    // Window expired, reset count
+    await prisma.rateLimitEntry.update({
+      where: { key },
+      data: { count: 1, resetAt: new Date(now.getTime() + 60 * 1000) },
+    })
+  } else if (entry) {
+    if (entry.count >= 25) {
+      return NextResponse.json(
+        { error: 'Too many verification requests. Please wait a moment.' },
+        { status: 429 },
+      )
+    }
+    await prisma.rateLimitEntry.update({
+      where: { key },
+      data: { count: { increment: 1 } },
+    })
+  } else {
+    await prisma.rateLimitEntry.create({
+      data: { key, count: 1, resetAt: new Date(now.getTime() + 60 * 1000) },
+    })
   }
 
   const warranty = await prisma.warranty.findUnique({

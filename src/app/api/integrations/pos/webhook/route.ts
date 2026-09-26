@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { POSIntegrationService } from '@/lib/integrations/pos'
 import { z } from 'zod'
+import { createHash } from 'crypto'
 
 const webhookSchema = z.object({
   shopSlug: z.string().min(1),
@@ -48,6 +49,33 @@ export async function POST(req: NextRequest) {
     if (!shop || shop.status !== 'ACTIVE') {
       return NextResponse.json({ error: 'Shop not found or inactive' }, { status: 404 })
     }
+
+    // Authenticate API key against tenant's registered active keys
+    const hashedKey = createHash('sha256').update(apiKey.trim()).digest('hex')
+    const activeKey = await prisma.apiKey.findFirst({
+      where: {
+        shopId: shop.id,
+        keyHash: hashedKey,
+        isActive: true,
+        revokedAt: null,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } },
+        ],
+      },
+    })
+
+    if (!activeKey) {
+      return NextResponse.json({ error: 'Invalid, expired, or revoked API key' }, { status: 401 })
+    }
+
+    // Record last used time
+    await prisma.apiKey
+      .update({
+        where: { id: activeKey.id },
+        data: { lastUsedAt: new Date() },
+      })
+      .catch(() => {})
 
     // Call POS Integration Service
     const result = await POSIntegrationService.processSale({

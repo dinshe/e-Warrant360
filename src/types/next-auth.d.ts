@@ -20,3 +20,14 @@ declare module 'next-auth' {
     isPlatformAdmin?: boolean
   }
 }
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    id?: string
+    isPlatformAdmin?: boolean
+    shopId?: string | null
+    shopSlug?: string | null
+    shopName?: string | null
+    role?: 'PLATFORM_ADMIN' | 'OWNER' | 'ADMIN' | 'STAFF' | null
+  }
+}
