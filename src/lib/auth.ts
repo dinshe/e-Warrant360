@@ -4,6 +4,7 @@ import { PrismaAdapter } from '@auth/prisma-adapter'
 import { prisma } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
+import { authConfig } from './auth.config'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -11,13 +12,8 @@ const loginSchema = z.object({
 })
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  trustHost: true,
+  ...authConfig,
   adapter: PrismaAdapter(prisma),
-  session: { strategy: 'jwt' },
-  pages: {
-    signIn: '/login',
-    error: '/login',
-  },
   providers: [
     Credentials({
       async authorize(credentials) {
@@ -43,9 +39,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!user || !user.passwordHash) return null
 
         // Check account lock
-        if (user.lockedUntil && user.lockedUntil > new Date()) {
-          return null
-        }
+        if (user.lockedUntil && user.lockedUntil > new Date()) return null
 
         // Check account status
         if (user.status === 'SUSPENDED') return null
@@ -53,7 +47,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const isValid = await bcrypt.compare(password, user.passwordHash)
 
         if (!isValid) {
-          // Increment failed attempts, lock after 5
           const attempts = user.failedLoginAttempts + 1
           const lockUntil =
             attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null
@@ -77,30 +70,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         })
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          isPlatformAdmin: user.isPlatformAdmin,
-        }
-      },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-        token.isPlatformAdmin = (user as any).isPlatformAdmin
-      }
-      return token
-    },
-    async session({ session, token }) {
-      const userId = (token?.id as string) || (token?.sub as string)
-      if (session.user && userId) {
-        session.user.id = userId
-        // Fetch shop context — always fresh from DB, never from client
+        // Fetch shop context at login time — stored in JWT, no DB call per request
         const shopUser = await prisma.shopUser.findFirst({
-          where: { userId, isActive: true },
+          where: { userId: user.id, isActive: true },
           include: {
             shop: {
               select: { id: true, name: true, slug: true, status: true },
@@ -108,11 +80,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
           orderBy: { joinedAt: 'asc' },
         })
-        ;(session.user as any).shopId = shopUser?.shopId ?? null
-        ;(session.user as any).shopSlug = shopUser?.shop?.slug ?? null
-        ;(session.user as any).shopName = shopUser?.shop?.name ?? null
-        ;(session.user as any).role = shopUser?.role ?? null
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          isPlatformAdmin: user.isPlatformAdmin,
+          shopId: shopUser?.shopId ?? null,
+          shopSlug: shopUser?.shop?.slug ?? null,
+          shopName: shopUser?.shop?.name ?? null,
+          role: shopUser?.role ?? null,
+        }
+      },
+    }),
+  ],
+  callbacks: {
+    // Override callbacks from authConfig — runs in Node.js runtime only
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id
+        token.isPlatformAdmin = (user as any).isPlatformAdmin ?? false
+        token.shopId = (user as any).shopId ?? null
+        token.shopSlug = (user as any).shopSlug ?? null
+        token.shopName = (user as any).shopName ?? null
+        token.role = (user as any).role ?? null
+      }
+      return token
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        const userId = (token?.id as string) || (token?.sub as string)
+        session.user.id = userId
         ;(session.user as any).isPlatformAdmin = (token.isPlatformAdmin as boolean) ?? false
+        ;(session.user as any).shopId = token.shopId ?? null
+        ;(session.user as any).shopSlug = token.shopSlug ?? null
+        ;(session.user as any).shopName = token.shopName ?? null
+        ;(session.user as any).role = token.role ?? null
       }
       return session
     },

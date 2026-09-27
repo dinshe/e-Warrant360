@@ -5,15 +5,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://ewarrant:ewarrant_pass@db:5432/ewarrant360?schema=public}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-super-secret-jwt-key-for-e-warrant-360-sri-lanka}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - AUTH_SECRET=${AUTH_SECRET:-${NEXTAUTH_SECRET:-super-secret-jwt-key-for-e-warrant-360-sri-lanka}}
-      - AUTH_URL=${AUTH_URL:-${NEXTAUTH_URL:-http://localhost:3000}}
       - AUTH_TRUST_HOST=true
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      - NEXT_PUBLIC_APP_NAME=e-warrant360
       - NODE_ENV=production
     command: sh -c "npx prisma db push --skip-generate && npm run start"
     depends_on:
@@ -23,10 +18,8 @@ services:
 
   db:
     image: postgres:16-alpine
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-ewarrant}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ewarrant_pass}
-      - POSTGRES_DB=${POSTGRES_DB:-ewarrant360}
+    env_file:
+      - .env
     ports:
       - "5432:5432"
     networks:
@@ -37,7 +30,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ewarrant -d ewarrant360"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ewarrant} -d ${POSTGRES_DB:-ewarrant360}"]
       interval: 5s
       timeout: 5s
       retries: 5
